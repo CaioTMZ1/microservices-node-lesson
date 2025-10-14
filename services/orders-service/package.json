@@ -1,0 +1,18 @@
+{
+  "name": "orders-service",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.17.1",
+    "amqplib": "^0.10.9",
+    "express": "^4.21.2",
+    "morgan": "^1.10.1",
+    "nanoid": "^5.0.7",
+    "node-fetch": "^3.3.2",
+    "opossum": "^9.0.0"
+  }
+}
