@@ -8,6 +8,7 @@ RUN npm install --only=production
 
 # Copiar código e schema do Prisma
 COPY services/orders-service/src ./src
+COPY services/orders-service/openapi.json ./openapi.json
 COPY services/orders-service/prisma ./prisma
 COPY common ./common
 
@@ -24,4 +25,4 @@ ENV QUEUE=orders.q
 ENV ROUTING_KEY_USER_CREATED=user.created
 
 EXPOSE 3002
-CMD ["npm", "start"]
+CMD ["sh","-c","npx prisma migrate deploy || npx prisma db push && npm start"]

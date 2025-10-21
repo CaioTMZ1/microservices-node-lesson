@@ -1,0 +1,14 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "Orders Service", "version": "1.0.0" },
+  "paths": {
+    "/": {
+      "get": { "summary": "List orders", "responses": { "200": { "description": "OK" } } },
+      "post": { "summary": "Create order", "responses": { "201": { "description": "Created" }, "400": { "description": "Bad Request" }, "503": { "description": "Users unavailable" } } }
+    },
+    "/{id}/cancel": {
+      "post": { "summary": "Cancel order", "parameters": [{"in":"path","name":"id","required":true,"schema":{"type":"string"}}], "responses": { "200": { "description": "OK" }, "404": { "description": "Not Found" } } }
+    }
+  }
+}
+

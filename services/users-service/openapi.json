@@ -1,0 +1,16 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "Users Service", "version": "1.0.0" },
+  "paths": {
+    "/": {
+      "get": { "summary": "List users", "responses": { "200": { "description": "OK" } } },
+      "post": { "summary": "Create user", "responses": { "201": { "description": "Created" }, "400": { "description": "Bad Request" } } }
+    },
+    "/{id}": {
+      "get": { "summary": "Get user by id", "parameters": [{"in":"path","name":"id","required":true,"schema":{"type":"string"}}], "responses": { "200": { "description": "OK" }, "404": { "description": "Not Found" } } },
+      "put": { "summary": "Update user", "parameters": [{"in":"path","name":"id","required":true,"schema":{"type":"string"}}], "responses": { "200": { "description": "OK" }, "400": { "description": "Bad Request" }, "404": { "description": "Not Found" } } },
+      "delete": { "summary": "Delete user", "parameters": [{"in":"path","name":"id","required":true,"schema":{"type":"string"}}], "responses": { "204": { "description": "No Content" }, "404": { "description": "Not Found" } } }
+    }
+  }
+}
+

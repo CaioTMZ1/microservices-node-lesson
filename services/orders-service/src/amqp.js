@@ -1,4 +1,3 @@
-// src/amqp.js
 import amqp from 'amqplib';
 import { retryWithBackoff } from './retry.js';
 

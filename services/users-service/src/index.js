@@ -3,26 +3,42 @@ import morgan from 'morgan';
 import { createChannel } from './amqp.js';
 import { PrismaClient } from '@prisma/client';
 import { ROUTING_KEYS } from '../common/events.js';
+import swaggerUi from 'swagger-ui-express';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const prisma = new PrismaClient();
 const app = express();
 
 app.use(express.json());
 app.use(morgan('dev'));
+if (process.env.NODE_ENV !== 'test') {
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const openapiPath = path.join(__dirname, '../openapi.json');
+  try {
+    const openapi = JSON.parse(fs.readFileSync(openapiPath, 'utf8'));
+    app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapi));
+  } catch (e) {
+    console.warn('[users] openapi load skipped:', e.message);
+  }
+}
 
 const PORT = process.env.PORT || 3001;
 const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://guest:guest@ms_rabbitmq:5672';
 const EXCHANGE = process.env.EXCHANGE || 'app.topic';
 
 let amqp = null;
-(async () => {
-  try {
-    amqp = await createChannel(RABBITMQ_URL, EXCHANGE);
-    console.log('[users] AMQP connected');
-  } catch (err) {
-    console.error('[users] AMQP connection failed:', err.message);
-  }
-})();
+if (process.env.NODE_ENV !== 'test') {
+  (async () => {
+    try {
+      amqp = await createChannel(RABBITMQ_URL, EXCHANGE);
+      console.log('[users] AMQP connected');
+    } catch (err) {
+      console.error('[users] AMQP connection failed:', err.message);
+    }
+  })();
+}
 
 // =============================
 // HEALTHCHECK
@@ -145,6 +161,10 @@ app.delete('/:id', async (req, res) => {
 // =============================
 // START SERVER
 // =============================
-app.listen(PORT, () => {
-  console.log(`[users] listening on http://localhost:${PORT}`);
-});
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`[users] listening on http://localhost:${PORT}`);
+  });
+}
+
+export default app;

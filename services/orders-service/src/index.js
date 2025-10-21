@@ -7,10 +7,23 @@ import { ROUTING_KEYS } from '../common/events.js';
 import { PrismaClient } from '@prisma/client';
 import { retryWithBackoff } from './retry.js';
 import { createCircuitBreaker } from './circuit.js';
+import swaggerUi from 'swagger-ui-express';
+import fs from 'fs';
+const openapiPath = new URL('../openapi.json', import.meta.url);
+let openapi = null;
+try {
+  openapi = JSON.parse(fs.readFileSync(openapiPath));
+} catch (e) {
+  // ignore in tests or when file missing
+}
+
 
 const app = express();
 app.use(express.json());
 app.use(morgan('dev'));
+if (process.env.NODE_ENV !== 'test' && openapi) {
+  app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapi));
+}
 
 const prisma = new PrismaClient();
 
@@ -22,36 +35,36 @@ const EXCHANGE = process.env.EXCHANGE || 'app.topic';
 const QUEUE = process.env.QUEUE || 'orders.q';
 const ROUTING_KEY_USER_CREATED = process.env.ROUTING_KEY_USER_CREATED || ROUTING_KEYS.USER_CREATED;
 
-// Cache local de usuários (alimentado por eventos)
 const userCache = new Map();
 let amqp = null;
 
-// Inicializa AMQP e consumo de eventos
-(async () => {
-  try {
-    amqp = await createChannel(RABBITMQ_URL, EXCHANGE);
-    console.log('[orders] AMQP connected');
+if (process.env.NODE_ENV !== 'test') {
+  (async () => {
+    try {
+      amqp = await createChannel(RABBITMQ_URL, EXCHANGE);
+      console.log('[orders] AMQP connected');
 
-    await amqp.ch.assertQueue(QUEUE, { durable: true });
-    await amqp.ch.bindQueue(QUEUE, EXCHANGE, ROUTING_KEY_USER_CREATED);
-    await amqp.ch.bindQueue(QUEUE, EXCHANGE, ROUTING_KEYS.USER_UPDATED);
+      await amqp.ch.assertQueue(QUEUE, { durable: true });
+      await amqp.ch.bindQueue(QUEUE, EXCHANGE, ROUTING_KEY_USER_CREATED);
+      await amqp.ch.bindQueue(QUEUE, EXCHANGE, ROUTING_KEYS.USER_UPDATED);
 
-    amqp.ch.consume(QUEUE, async (msg) => {
-      if (!msg) return;
-      try {
-        const user = JSON.parse(msg.content.toString());
-        userCache.set(user.id, user);
-        console.log('[orders] consumed event -> cached user:', user.id);
-        amqp.ch.ack(msg);
-      } catch (err) {
-        console.error('[orders] consume error:', err.message);
-        amqp.ch.nack(msg, false, false);
-      }
-    });
-  } catch (err) {
-    console.error('[orders] AMQP connection failed:', err.message);
-  }
-})();
+      amqp.ch.consume(QUEUE, async (msg) => {
+        if (!msg) return;
+        try {
+          const user = JSON.parse(msg.content.toString());
+          userCache.set(user.id, user);
+          console.log('[orders] consumed event -> cached user:', user.id);
+          amqp.ch.ack(msg);
+        } catch (err) {
+          console.error('[orders] consume error:', err.message);
+          amqp.ch.nack(msg, false, false);
+        }
+      });
+    } catch (err) {
+      console.error('[orders] AMQP connection failed:', err.message);
+    }
+  })();
+}
 
 app.get('/health', (req, res) => res.json({ ok: true, service: 'orders' }));
 
@@ -60,7 +73,7 @@ app.get('/', async (req, res) => {
   res.json(all);
 });
 
-// Função auxiliar: fetch com timeout
+
 async function fetchWithTimeout(url, ms) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), ms);
@@ -72,7 +85,7 @@ async function fetchWithTimeout(url, ms) {
   }
 }
 
-// Circuit breaker para o users-service
+
 const usersBreaker = createCircuitBreaker(async (userId) => {
   const resp = await retryWithBackoff(async () => {
     const res = await fetchWithTimeout(`${USERS_BASE_URL}/${userId}`, HTTP_TIMEOUT_MS);
@@ -82,14 +95,13 @@ const usersBreaker = createCircuitBreaker(async (userId) => {
   return resp;
 }, 'users-service');
 
-// Criar novo pedido
+
 app.post('/', async (req, res) => {
   const { userId, items, total } = req.body || {};
   if (!userId || !Array.isArray(items) || typeof total !== 'number') {
     return res.status(400).json({ error: 'userId, items[], total<number> são obrigatórios' });
   }
 
-  // Valida usuário via Circuit Breaker + Retry + Cache
   try {
     const resp = await usersBreaker.fire(userId);
     if (!resp.ok) return res.status(400).json({ error: 'usuário inválido' });
@@ -100,7 +112,6 @@ app.post('/', async (req, res) => {
     }
   }
 
-  // Cria o pedido no banco
   const order = await prisma.order.create({
     data: { userId, items: JSON.stringify(items), total, status: 'created' },
   });
@@ -117,7 +128,6 @@ app.post('/', async (req, res) => {
   res.status(201).json(order);
 });
 
-// Cancelar pedido
 app.post('/:id/cancel', async (req, res) => {
   const { id } = req.params;
   const existing = await prisma.order.findUnique({ where: { id } });
@@ -141,7 +151,11 @@ app.post('/:id/cancel', async (req, res) => {
   res.json(cancelled);
 });
 
-app.listen(PORT, () => {
-  console.log(`[orders] listening on http://localhost:${PORT}`);
-  console.log(`[orders] users base url: ${USERS_BASE_URL}`);
-});
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`[orders] listening on http://localhost:${PORT}`);
+    console.log(`[orders] users base url: ${USERS_BASE_URL}`);
+  });
+}
+
+export default app;
